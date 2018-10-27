@@ -41,14 +41,15 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             }
 
             //Construct the instance of GelfMessage
-            //See https://github.com/Graylog2/graylog2-docs/wiki/GELF "Specification (version 1.0)"
+            //See http://docs.graylog.org/en/2.4/pages/gelf.html#gelf-payload-specification "Specification (version 1.1)"
+            
             var gelfMessage = new GelfMessage
                                   {
                                       Version = GelfVersion,
                                       Host = Dns.GetHostName(),
                                       ShortMessage = shortMessage,
                                       FullMessage = logEventMessage,
-                                      Timestamp = logEventInfo.TimeStamp,
+                                      Timestamp = new DateTimeOffset(logEventInfo.TimeStamp).ToUnixTimeMilliseconds() / 1000d,
                                       Level = GetSeverityLevel(logEventInfo.Level),
                                       //Spec says: facility must be set by the client to "GELF" if empty
                                       Facility = (string.IsNullOrEmpty(facility) ? "GELF" : facility),
