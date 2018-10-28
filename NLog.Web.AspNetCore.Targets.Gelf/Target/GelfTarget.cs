@@ -1,29 +1,59 @@
-using NLog;
 using NLog.Targets;
 using Newtonsoft.Json;
 using NLog.Config;
 using System.Collections.Generic;
 using System;
 using System.Linq;
-using System.Net;
-using System.Net.Sockets;
 using System.ComponentModel.DataAnnotations;
+using NLog.Common;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf
 {
     [Target("Gelf")]
-    public class GelfTarget : TargetWithLayout
+    public class GelfTarget : TargetWithLayout, IGelfTarget
     {
-        private Lazy<IPEndPoint> _lazyIpEndoint;
+        private readonly IConverter _converter;
         private Lazy<ITransport> _lazyITransport;
         private string _facility;
-        private Uri _endpoint;
+        private int _maxUdpChunkSize = UdpTransport.DefaultUdpDatagramSize;
+        private bool _disposed;
+        private Uri _endpointUri;
+        private int _maxNestedExceptionsDepth = GelfConverter.DefaultMaxNestedExceptionsDepth;
+
+        public GelfTarget()
+            : this(new TransportFactory(new DnsWrapper()), new GelfConverter(new DnsWrapper()))
+        {
+        }
+
+        internal GelfTarget(ITransportFactory transportFactory, IConverter converter)
+        {
+            _converter = converter;
+            _converter.Target = this;
+            Parameters = new List<GelfParameterInfo>();
+
+            _lazyITransport = new Lazy<ITransport>(() => transportFactory.CreateTransport(this));
+        }
+
+        Uri IGelfTarget.EndpointUri => _endpointUri;
+
+        public bool SendLastFormatParameter { get; set; }
 
         [Required]
         public string Endpoint
         {
-            get { return _endpoint.ToString(); }
-            set {  _endpoint = value != null ? new Uri(Environment.ExpandEnvironmentVariables(value)) : null; }
+            get { return _endpointUri?.OriginalString; }
+            set
+            {
+                if (Uri.TryCreate(value, UriKind.RelativeOrAbsolute, out var uri))
+                {
+                    Environment.ExpandEnvironmentVariables(value);
+                    _endpointUri = uri;
+                }
+                else
+                {
+                    InternalLogger.Info(() => "Endpoint is not a valid Uri!");
+                }
+            }
         }
 
         [ArrayParameter(typeof(GelfParameterInfo), "parameter")]
@@ -35,65 +65,74 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             set { _facility = value != null ? Environment.ExpandEnvironmentVariables(value) : null; }
         }
 
-        public bool SendLastFormatParameter { get; set; }
-
-        public IConverter Converter { get; private set; }
-        public IEnumerable<ITransport> Transports { get; private set; }
-        public DnsBase Dns { get; private set; }
-
-        public GelfTarget() : this(new[]{new UdpTransport(new UdpTransportClient())}, 
-            new GelfConverter(), 
-            new DnsWrapper())
+        public int MaxUdpChunkSize
         {
+            get { return _maxUdpChunkSize; }
+            set
+            {
+                _maxUdpChunkSize = Math.Max(UdpTransport.MinUdpDatagramSize, Math.Min(value, UdpTransport.MaxUdpDatagramSize));
+                InternalLogger.Info(() => $"{nameof(MaxUdpChunkSize)} is set to {MaxUdpChunkSize}");
+            }
         }
 
-        public GelfTarget(IEnumerable<ITransport> transports, IConverter converter, DnsBase dns)
+        public int MaxNestedExceptionsDepth
         {
-            Dns = dns;
-            Transports = transports;
-            Converter = converter;
-            this.Parameters = new List<GelfParameterInfo>();
-            _lazyIpEndoint = new Lazy<IPEndPoint>(() =>
+            get { return _maxNestedExceptionsDepth; }
+            set
             {
-                var addresses = Dns.GetHostAddresses(_endpoint.Host);
-                var ip = addresses.FirstOrDefault(x => x.AddressFamily == AddressFamily.InterNetwork);
-
-                return new IPEndPoint(ip, _endpoint.Port);
-            });
-            _lazyITransport = new Lazy<ITransport>(() =>
-            {
-                return Transports.Single(x => x.Scheme.ToUpper() == _endpoint.Scheme.ToUpper());
-            });
+                _maxNestedExceptionsDepth = Math.Max(0, value);
+                InternalLogger.Info(() => $"{nameof(MaxNestedExceptionsDepth)} is set to {MaxNestedExceptionsDepth}");
+            }
         }
 
-        public void WriteLogEventInfo(LogEventInfo logEvent)
+        protected override void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (_lazyITransport.IsValueCreated)
+                {
+                    _lazyITransport.Value?.Dispose();
+                }
+
+                _disposed = true;
+            }
+        }
+
+        internal void InternalWrite(LogEventInfo logEvent)
         {
             Write(logEvent);
         }
 
         protected override void Write(LogEventInfo logEvent)
         {
-            foreach (var par in this.Parameters)
+            if (_lazyITransport.Value != null)
             {
-                if (!logEvent.Properties.ContainsKey(par.Name))
+                foreach (var par in Parameters)
                 {
-                    string stringValue = par.Layout.Render(logEvent);
+                    if (!logEvent.Properties.ContainsKey(par.Name))
+                    {
+                        string stringValue = par.Layout.Render(logEvent);
 
-                    logEvent.Properties.Add(par.Name, stringValue);
+                        logEvent.Properties.Add(par.Name, stringValue);
+                    }
+                }
+
+                if (SendLastFormatParameter && logEvent.Parameters != null && logEvent.Parameters.Any())
+                {
+                    // PromoteObjectPropertiesMarker used as property name to indicate that the value should be treated as a object 
+                    // whose properties should be mapped to additional fields in graylog 
+                    logEvent.Properties.Add(ConverterConstants.PromoteObjectPropertiesMarker, logEvent.Parameters.Last());
+                }
+
+                var gelfObject = _converter.GetGelfObject(logEvent);
+
+                if (gelfObject != null)
+                {
+                    WriteAsyncLogEvents();
+                    
+                    _lazyITransport.Value.Send(gelfObject);
                 }
             }
-
-            if (SendLastFormatParameter && logEvent.Parameters != null && logEvent.Parameters.Any())
-            {
-                ///PromoteObjectPropertiesMarker used as property name to indicate that the value should be treated as a object 
-                ///whose proeprties should be mapped to additional fields in graylog 
-                logEvent.Properties.Add(ConverterConstants.PromoteObjectPropertiesMarker, logEvent.Parameters.Last());
-            }
-
-            var jsonObject = Converter.GetGelfJson(logEvent, Facility);
-            if (jsonObject == null) return;
-            _lazyITransport.Value
-                .Send(_lazyIpEndoint.Value, jsonObject.ToString(Formatting.None, null));
         }
     }
 }

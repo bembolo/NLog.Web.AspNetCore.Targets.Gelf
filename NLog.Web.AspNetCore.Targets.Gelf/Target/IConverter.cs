@@ -2,8 +2,10 @@ using Newtonsoft.Json.Linq;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf
 {
-    public interface IConverter
+    internal interface IConverter
     {
-        JObject GetGelfJson(LogEventInfo logEventInfo, string facility);
+        JObject GetGelfObject(LogEventInfo logEventInfo);
+
+        IGelfTarget Target { get; set; }
     }
 }
