@@ -5,13 +5,15 @@ using System.Threading.Tasks;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf
 {
-    internal class UdpClientWrapper : IUdpClient
+    internal sealed class UdpClientWrapper : IUdpClient
     {
         private readonly UdpClient _client;
+        private readonly IPEndPoint _endpoint;
 
         public UdpClientWrapper(IPEndPoint endpoint)
         {
-            _client = new UdpClient(endpoint);
+            _client = new UdpClient();
+            _endpoint = endpoint;
         }
 
         public bool DontFragment
@@ -22,7 +24,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
 
         public Task<int> SendAsync(byte[] datagram, int bytes)
         {
-            return _client.SendAsync(datagram, bytes);
+            return _client.SendAsync(datagram, bytes, _endpoint);
         }
 
         public void Dispose() => _client.Dispose();

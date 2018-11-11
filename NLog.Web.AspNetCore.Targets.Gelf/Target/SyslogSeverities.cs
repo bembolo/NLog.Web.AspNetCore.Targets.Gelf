@@ -3,12 +3,12 @@
     internal enum SyslogSeverities
     {
         Emergency = 0,
-        Alert, 
-        Critical, 
+        Alert,
+        Critical,
         Error,
         Warning,
         Notice,
         Informational,
-        Debug,
+        Debug
     }
 }

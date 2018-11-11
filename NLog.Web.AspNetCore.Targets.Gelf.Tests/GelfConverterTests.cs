@@ -1,15 +1,14 @@
-using Newtonsoft.Json;
 using System;
+using Newtonsoft.Json;
 using NSubstitute;
 using Xunit;
-using System.Text.RegularExpressions;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
 {
     public class GelfConverterTests
     {
-        private IDns _dns;
-        private GelfConverter _converter;
+        private readonly IDns _dns;
+        private readonly GelfConverter _converter;
 
         public GelfConverterTests()
         {
@@ -38,6 +37,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [InlineData(1540711622000, "1540711622")]
         public void ShouldGetGelfJsonProvideJsonWithValidUnixEpochTimestampHavingMaxThreeDigitDecimalFractions(long unixEpochMilliseconds, string expectedSerialized)
         {
+            var expectedEpochMillis = unixEpochMilliseconds / 1000d;
             var logEvent = LogEventInfo.Create(LogLevel.Info, "loggerName", null, "message");
             logEvent.TimeStamp = DateTimeOffset.FromUnixTimeMilliseconds(unixEpochMilliseconds).UtcDateTime;
 
@@ -49,6 +49,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
             var value = gelfJson.Value<double>("timestamp");
             var serializedTimestamp = jToken.ToString(Formatting.None, null);
 
+            Assert.Equal(expectedEpochMillis, value);
             Assert.Matches(expectedSerialized, serializedTimestamp);
         }
 
@@ -56,7 +57,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         public void ShouldGetGelfJsonDiscardMappedDiagnosticsLogicalContextDataIfPresentInLogEventInfo()
         {
             MappedDiagnosticsLogicalContext.Set("test", "value");
-            
+
             var logEvent = LogEventInfo.Create(LogLevel.Info, "loggerName", null, "message");
             logEvent.Properties.Add("test", "anotherValue");
 
@@ -102,10 +103,10 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
 
                 var lines = stackDetail.Split(Environment.NewLine);
                 Assert.StartsWith(@"   at NLog.Web.AspNetCore.Targets.Gelf.Tests.GelfConverterTests.ShouldGetExceptionDetailsGetNestedExceptionDetails() in ", lines[0]);
-                Assert.EndsWith(@"line 89", lines[0]);
+                Assert.EndsWith(@"line 90", lines[0]);
                 Assert.Equal("--- Inner exception stack trace ---", lines[1]);
                 Assert.StartsWith(@"   at NLog.Web.AspNetCore.Targets.Gelf.Tests.GelfConverterTests.ShouldGetExceptionDetailsGetNestedExceptionDetails() in ", lines[2]);
-                Assert.EndsWith(@"line 93", lines[2]);
+                Assert.EndsWith(@"line 94", lines[2]);
             }
         }
     }

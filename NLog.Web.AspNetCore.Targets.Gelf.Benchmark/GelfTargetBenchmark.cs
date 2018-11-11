@@ -1,24 +1,24 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Running;
 using CSharpx;
+using NLog.Web.AspNetCore.Targets.Gelf.Tests;
 using NSubstitute;
-using Xunit;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf.Benchmark
 {
     [CoreJob]
-    public class GelfTargetBenchmark
+    public sealed class GelfTargetBenchmark : IDisposable
     {
-        private IList<LogEventInfo> _logEvents;
-        private GelfConverter _converter;
-        private IUdpClient _udpClient;
-        private UdpTransport _udpTransport;
-        private ITransportFactory _transportFactory;
-        private GelfTarget _target;
+        private readonly IList<LogEventInfo> _logEvents;
+        private readonly GelfConverter _converter;
+        private readonly IUdpClient _udpClient;
+        private readonly UdpTransport _udpTransport;
+        private readonly ITransportFactory _transportFactory;
+        private readonly TestGelfTarget _target;
+
+        private bool _disposed;
 
         public GelfTargetBenchmark()
         {
@@ -28,16 +28,35 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Benchmark
             PopulateLogEvents(random);
 
             _converter = new GelfConverter(Substitute.For<IDns>());
-            _udpClient = new StubUdpClient();
+            _udpClient = new FakeUdpClient();
             _udpTransport = new UdpTransport(_udpClient, 1500);
             _transportFactory = Substitute.For<ITransportFactory>();
 
-            _target = new GelfTarget(_transportFactory, _converter)
+            _target = new TestGelfTarget(_transportFactory, _converter)
             {
                 SendLastFormatParameter = true,
             };
 
             _transportFactory.CreateTransport(_target).Returns(_udpTransport);
+        }
+
+        [Benchmark]
+        public void VersionTwoPointZero()
+        {
+            foreach (var message in _logEvents)
+            {
+                _target.Write(message);
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _target?.Dispose();
+
+                _disposed = true;
+            }
         }
 
         private void PopulateLogEvents(Random random)
@@ -53,27 +72,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Benchmark
                             Enumerable.Range(0, random.Next(1000, 10000))
                                 .Select(n => n.ToString("X")))));
             });
-        }
-
-        [Fact]
-        public void BenchmarkWrite()
-        {
-            var summary = BenchmarkRunner.Run<GelfTargetBenchmark>();
-        }
-
-        [Fact]
-        public void TestBenchmark()
-        {
-            VersionTwoPointZero();
-        }
-
-        [Benchmark]
-        public void VersionTwoPointZero()
-        {
-            foreach (var message in _logEvents)
-            {
-                _target.InternalWrite(message);                
-            }
         }
     }
 }

@@ -1,13 +1,13 @@
-﻿using System.Net;
-using Xunit;
+﻿using System;
+using System.Net;
 using NSubstitute;
-using System;
+using Xunit;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
 {
     public class TransportFactoryTests
     {
-        private IDns _dns;
+        private readonly IDns _dns;
 
         public TransportFactoryTests()
         {
@@ -26,7 +26,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
             target.EndpointUri.Returns(endpointUri);
             target.MaxUdpChunkSize.Returns(expectedChunkSize);
 
-            _dns.GetHostAddresses(endpointUri.Host).Returns(new IPAddress[]{ IPAddress.Parse("127.0.0.1"), });
+            _dns.GetHostAddresses(endpointUri.Host).Returns(new[] { IPAddress.Parse("127.0.0.1") });
 
             // Act
             var transport = factory.CreateTransport(target);
@@ -39,9 +39,9 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         }
 
         [Fact]
-        public void ShouldeCreateTransportNotCreateUdpTransportWhenEndpointNotAValidUdpEndpoint()
+        public void ShouldCreateTransportNotCreateTransportWhenTransportNotSupported()
         {
-            var endpointUri = new Uri("http://graylog.host.com:12201/");
+            var endpointUri = new Uri("amqp://graylog.host.com:12201/");
 
             var factory = new TransportFactory(_dns);
 

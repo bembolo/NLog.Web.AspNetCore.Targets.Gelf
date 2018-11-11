@@ -8,7 +8,6 @@ using NLog.Common;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf
 {
-
     internal class GelfConverter : IConverter
     {
         internal const int DefaultMaxNestedExceptionsDepth = 10;
@@ -17,23 +16,24 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
         private const string GelfVersion = "1.1";
 
         // http://docs.graylog.org/en/2.4/pages/gelf.html#gelf-payload-specification
-        private static readonly int[] _severityMapping = new int[]
+        private static readonly int[] _severityMapping = new[]
         {
-            /* LogLevel.Trace.Ordinal => */ (int)SyslogSeverities.Debug, 
+            /* LogLevel.Trace.Ordinal => */ (int)SyslogSeverities.Debug,
             /* LogLevel.Debug.Ordinal => */ (int)SyslogSeverities.Debug,
-            /* LogLevel.Info.Ordinal =>  */ (int)SyslogSeverities.Informational, 
-            /* LogLevel.Warn.Ordinal =>  */ (int)SyslogSeverities.Warning, 
-            /* LogLevel.Error.Orindal => */ (int)SyslogSeverities.Error, 
+            /* LogLevel.Info.Ordinal =>  */ (int)SyslogSeverities.Informational,
+            /* LogLevel.Warn.Ordinal =>  */ (int)SyslogSeverities.Warning,
+            /* LogLevel.Error.Orindal => */ (int)SyslogSeverities.Error,
             /* LogLevel.Fatal.Ordinal => */ (int)SyslogSeverities.Critical,
         };
-        private Lazy<string> _facility;
-        private Lazy<int> _maxNestedExceptionsDepth;
-        private string _hostName;
+
+        private readonly Lazy<string> _facility;
+        private readonly Lazy<int> _maxNestedExceptionsDepth;
+        private readonly string _hostName;
 
         public GelfConverter(IDns dns)
         {
             _facility = new Lazy<string>(() => string.IsNullOrEmpty(Target?.Facility)
-                ? "GELF"
+                ? "GELF" // Spec says: facility must be set by the client to "GELF" if empty
                 : Target.Facility);
             _maxNestedExceptionsDepth =
                 new Lazy<int>(() => Target?.MaxNestedExceptionsDepth ?? DefaultMaxNestedExceptionsDepth);
@@ -44,13 +44,13 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
 
         public JObject GetGelfObject(LogEventInfo logEventInfo)
         {
-            //Retrieve the formatted message from LogEventInfo
+            // Retrieve the formatted message from LogEventInfo
             if (logEventInfo == null || logEventInfo.FormattedMessage == null || logEventInfo.Level == LogLevel.Off)
                 return null;
 
             var logEventMessage = logEventInfo.FormattedMessage;
 
-            //If we are dealing with an exception, pass exception properties to LogEventInfo properties
+            // If we are dealing with an exception, pass exception properties to LogEventInfo properties
             if (logEventInfo.Exception != null)
             {
                 (var exceptionDetail, var stackDetail) = GetExceptionDetails(logEventInfo.Exception, _maxNestedExceptionsDepth.Value);
@@ -60,17 +60,15 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
                 logEventInfo.Properties.Add("StackTrace", stackDetail);
             }
 
-            //Figure out the short message
+            // Figure out the short message
             var shortMessage = logEventMessage;
             if (shortMessage.Length > ShortMessageMaxLength)
             {
                 shortMessage = shortMessage.Substring(0, ShortMessageMaxLength);
             }
 
-            //Construct the instance of GelfMessage
-            //See http://docs.graylog.org/en/2.4/pages/gelf.html#gelf-payload-specification "Specification (version 1.1)"
-
-            
+            // Construct the instance of GelfMessage
+            // See http://docs.graylog.org/en/2.4/pages/gelf.html#gelf-payload-specification "Specification (version 1.1)"
             var gelfMessage = new GelfMessage
             {
                 Version = GelfVersion,
@@ -79,7 +77,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
                 FullMessage = logEventMessage,
                 Timestamp = new DateTimeOffset(logEventInfo.TimeStamp).ToUnixTimeMilliseconds() / 1000d,
                 Level = _severityMapping[logEventInfo.Level.Ordinal],
-                //Spec says: facility must be set by the client to "GELF" if empty
                 Facility = _facility.Value,
                 Line = (logEventInfo.UserStackFrame != null)
                                                  ? logEventInfo.UserStackFrame.GetFileLineNumber().ToString(
@@ -90,7 +87,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
                                                  : string.Empty,
             };
 
-            //Add any other interesting data to LogEventInfo properties
+            // Add any other interesting data to LogEventInfo properties
             logEventInfo.Properties.Add("LoggerName", logEventInfo.LoggerName);
 
             // adding MappedDiagnosticsLogicalContext data
@@ -105,7 +102,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
 
             var jObject = JObject.FromObject(gelfMessage);
 
-            //We will persist them "Additional Fields" according to Gelf spec
+            // We will persist them "Additional Fields" according to Gelf spec
             foreach (var property in logEventInfo.Properties)
             {
                 AddAdditionalField(jObject, property);
@@ -114,49 +111,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             return jObject;
         }
 
-        private static void AddAdditionalField(JObject jObject, KeyValuePair<object, object> property)
-        {
-            if (property.Key == ConverterConstants.PromoteObjectPropertiesMarker &&
-                property.Value != null &&
-                property.Value is object)
-            {
-                try
-                {
-                    var jo = JObject.FromObject(property.Value);
-                    foreach (var joProp in jo)
-                    {
-                        AddAdditionalField(jo, new KeyValuePair<object, object>(joProp.Key, joProp.Value));
-                    }
-                }
-                catch (Exception ex)
-                {
-                    InternalLogger.Warn(ex, () => $"Unable to add additional field!");
-                }
-            }
-            else if (property.Key is string propertyKey && propertyKey != null)
-            {
-                //According to the GELF spec, libraries should NOT allow to send id as additional field (_id)
-                //Server MUST skip the field because it could override the MongoDB _key field
-                if (propertyKey.Equals("id", StringComparison.OrdinalIgnoreCase))
-                    propertyKey = "id_";
-
-                //According to the GELF spec, additional field keys should start with '_' to avoid collision
-                if (!propertyKey.StartsWith("_", StringComparison.OrdinalIgnoreCase))
-                    propertyKey = "_" + propertyKey;
-
-                JToken value = null;
-                if(property.Value != null)
-                    value = JToken.FromObject(property.Value);
-
-                jObject.Add(propertyKey, value);                    
-            }
-        }
-
-        /// <summary>
-        /// Get the message details from all nested exceptions, up to maxNestedExceptionsDepth.
-        /// </summary>
-        /// <param name="ex">Exception to get details for</param>
-        /// <param name="maxNestedExceptionsDepth">Max number of nested exceptions to process.</param>
         internal static (string exceptionDetail, string stackDetail) GetExceptionDetails(Exception ex, int maxNestedExceptionsDepth)
         {
             const string ExceptionMessageSeparator = " ---> ";
@@ -182,7 +136,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             void InsertStackDetail(Exception exception, StringBuilder stringBuilder, int level)
             {
                 if (level < maxNestedExceptionsDepth && exception.InnerException != null)
-                    InsertStackDetail(exception.InnerException, stringBuilder, level+1);
+                    InsertStackDetail(exception.InnerException, stringBuilder, level + 1);
 
                 if (exception.StackTrace != null)
                 {
@@ -197,6 +151,44 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             InsertExceptionMessage(ex, exceptionDetail, 0);
 
             return (exceptionDetail.ToString(), stackDetail.ToString());
+        }
+
+        private static void AddAdditionalField(JObject jObject, KeyValuePair<object, object> property)
+        {
+            if (property.Key == ConverterConstants.PromoteObjectPropertiesMarker &&
+                property.Value != null &&
+                property.Value is object obj)
+            {
+                try
+                {
+                    var jo = JObject.FromObject(obj);
+                    foreach (var joProp in jo)
+                    {
+                        AddAdditionalField(jo, new KeyValuePair<object, object>(joProp.Key, joProp.Value));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    InternalLogger.Warn(ex, () => $"Unable to add additional field!");
+                }
+            }
+            else if (property.Key is string propertyKey)
+            {
+                // According to the GELF spec, libraries should NOT allow to send id as additional field (_id)
+                // Server MUST skip the field because it could override the MongoDB _key field
+                if (propertyKey.Equals("id", StringComparison.OrdinalIgnoreCase))
+                    propertyKey = "id_";
+
+                // According to the GELF spec, additional field keys should start with '_' to avoid collision
+                if (!propertyKey.StartsWith("_", StringComparison.OrdinalIgnoreCase))
+                    propertyKey = "_" + propertyKey;
+
+                JToken value = null;
+                if (property.Value != null)
+                    value = JToken.FromObject(property.Value);
+
+                jObject.Add(propertyKey, value);
+            }
         }
     }
 }

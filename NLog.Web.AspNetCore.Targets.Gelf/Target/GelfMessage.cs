@@ -2,7 +2,8 @@ using Newtonsoft.Json;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf
 {
-    public class GelfMessage
+    [JsonObject(MemberSerialization.OptIn)]
+    internal class GelfMessage
     {
         [JsonProperty("facility")]
         public string Facility { get; set; }

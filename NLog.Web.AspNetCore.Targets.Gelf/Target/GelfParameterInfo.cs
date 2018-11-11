@@ -3,9 +3,15 @@ using NLog.Layouts;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf
 {
+    /// <summary>
+    /// Represents optional parameters to be included in the GELF message.
+    /// </summary>
     [NLogConfigurationItem]
     public class GelfParameterInfo
     {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="GelfParameterInfo" /> class.
+        /// </summary>
         public GelfParameterInfo()
             : this(null, null)
         {

@@ -1,0 +1,117 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>NLog.Web.AspNetCore.Targets.Gelf</name>
+    </assembly>
+    <members>
+        <member name="T:NLog.Web.AspNetCore.Targets.Gelf.GelfParameterInfo">
+            <summary>
+            Represents optional parameters to be included in the GELF message.
+            </summary>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.GelfParameterInfo.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:NLog.Web.AspNetCore.Targets.Gelf.GelfParameterInfo" /> class.
+            </summary>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.GelfParameterInfo.#ctor(System.String,NLog.Layouts.Layout)">
+            <summary>
+            Initializes a new instance of the <see cref="T:NLog.Web.AspNetCore.Targets.Gelf.GelfParameterInfo" /> class.
+            </summary>
+            <param name="parameterName">Name of the parameter.</param>
+            <param name="parameterLayout">The parameter layout.</param>
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfParameterInfo.Name">
+            <summary>
+            Gets or sets the GELF parameter name.
+            </summary>
+            <docgen category='Parameter Options' order='10' />
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfParameterInfo.Layout">
+            <summary>
+            Gets or sets the layout that should be use to calcuate the value for the parameter.
+            </summary>
+            <docgen category='Parameter Options' order='10' />
+        </member>
+        <member name="T:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget">
+            <summary>
+            NLog target that sends GELF 1.1 messages to Graylog2.
+            </summary>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.#ctor">
+            <summary>
+            Initializes a new instance of the <see cref="T:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget"/> class.
+            </summary>
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.EndpointUri">
+            <summary>
+            Gets the endpoint set by the <see cref="P:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.Endpoint"/> property as an <see cref="T:System.Uri"/> instance.
+            </summary>
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.SendLastFormatParameter">
+            <summary>
+            Gets or sets a value indicating whether last parameter of message format should be sent to graylog as separate field per property.
+            </summary>
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.Endpoint">
+            <summary>
+            Gets or sets the endpoint uri pointing to the Graylog2 input in the format udp://{IP or host name}:{port}. Note: support is currently only for UDP transport and HTTP application protocol
+            </summary>
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.Parameters">
+            <summary>
+            Gets the optional parameters to be included in the GELF message.
+            </summary>
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.Facility">
+            <summary>
+            Gets or sets the facility of the GELF message.
+            </summary>
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.MaxUdpChunkSize">
+            <summary>
+            Gets or sets the maximum number of bytes of the UDP datagram chunk. Note that valu is coerced to [576, 8192].
+            </summary>
+        </member>
+        <member name="P:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.MaxNestedExceptionsDepth">
+            <summary>
+            Gets or sets the maximum number of nested exception to be logged. Default value is 10.
+            </summary>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.InitializeTarget">
+            <inheritdoc/>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.Dispose(System.Boolean)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.GelfTarget.Write(NLog.LogEventInfo)">
+            <inheritdoc/>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.UdpTransport.Send(Newtonsoft.Json.Linq.JObject)">
+            <summary>
+            Sends a message to GrayLog2 server
+            </summary>
+            <param name="message">JObject message to serialize and log</param>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.UdpTransport.ConstructChunkHeader(System.Byte[],System.Int32,System.Int32)">
+            <summary>
+            Chunk header structure is:
+            - Chunked GELF ID: 0x1e 0x0f (identifying this message as a chunked GELF message)
+            - Message ID: 8 bytes (Must be the same for every chunk of this message. Identifying the whole message itself and is used to reassemble the chunks later.)
+            - Sequence Number: 1 byte (The sequence number of this chunk)
+            - Total Number: 1 byte (How many chunks does this message consist of in total)
+            </summary>
+            <param name="messageId">Unique identifier of the whole message (not just this chunk)</param>
+            <param name="chunkSequenceNumber">Sequence number of this chunk</param>
+            <param name="chunkCount">Total number of chunks whole message consists of</param>
+            <returns>Chunk header in bytes</returns>
+        </member>
+        <member name="M:NLog.Web.AspNetCore.Targets.Gelf.UdpTransport.CompressMessage(System.String@)">
+            <summary>
+            Compresses the given message using GZip algorithm
+            </summary>
+            <param name="message">Message to be compressed</param>
+            <returns>Compressed message in bytes</returns>
+        </member>
+    </members>
+</doc>

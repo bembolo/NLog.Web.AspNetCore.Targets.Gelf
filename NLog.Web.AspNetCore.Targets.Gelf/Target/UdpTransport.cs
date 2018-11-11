@@ -1,33 +1,41 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Text;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NLog.Common;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf
 {
-    internal class UdpTransport : ITransport
+    internal sealed class UdpTransport : ITransport
     {
-        // Limitation from GrayLog2
-        private const int MaxNumberOfChunksAllowed = 128;
-
         internal const int MinUdpDatagramSize = 576;
         internal const int MaxUdpDatagramSize = 8192;
         internal const int DefaultUdpDatagramSize = 1500;
+
+        // Limitation from GrayLog2
+        private const int MaxNumberOfChunksAllowed = 128;
 
         private readonly Random _messageIdGenerator = new Random();
         private readonly IUdpClient _udpClient;
 
         private bool _disposed;
 
+        public UdpTransport(IPEndPoint ipEndpoint, int maxChunkSize)
+            : this(new UdpClientWrapper(ipEndpoint), maxChunkSize)
+        {
+        }
+
         internal UdpTransport(IUdpClient udpClient, int maxChunkSize)
         {
-            if (udpClient == null) throw new ArgumentNullException(nameof(udpClient));
-            if (maxChunkSize < MinUdpDatagramSize || maxChunkSize > MaxUdpDatagramSize) throw new ArgumentOutOfRangeException(nameof(maxChunkSize), $"MaxChunkSize must be in the interval: [{MinUdpDatagramSize}, {MaxUdpDatagramSize}]");
+            if (udpClient == null)
+                throw new ArgumentNullException(nameof(udpClient));
+
+            if (maxChunkSize < MinUdpDatagramSize || maxChunkSize > MaxUdpDatagramSize)
+                throw new ArgumentOutOfRangeException(nameof(maxChunkSize), $"MaxChunkSize must be in the interval: [{MinUdpDatagramSize}, {MaxUdpDatagramSize}]");
 
             _udpClient = udpClient;
             _udpClient.DontFragment = true;
@@ -35,24 +43,20 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             MaxChunkSize = maxChunkSize;
         }
 
-        public UdpTransport(IPEndPoint ipEndpoint, int maxChunkSize)
-            : this(new UdpClientWrapper(ipEndpoint), maxChunkSize)
-        {
-        }
-
         internal int MaxChunkSize { get; }
-        
+
         /// <summary>
         /// Sends a message to GrayLog2 server
         /// </summary>
-        /// <param name="message">Message (in JSON) to log</param>
-        public void Send(JObject jObject)
+        /// <param name="message">JObject message to serialize and log</param>
+        public void Send(JObject message)
         {
-            if (jObject == null) throw new ArgumentNullException(nameof(jObject));
+            if (message == null)
+                throw new ArgumentNullException(nameof(message));
 
-            var message = jObject.ToString(Formatting.None, null);
+            var json = message.ToString(Formatting.None, null);
 
-            var compressedMessage = CompressMessage(message);
+            var compressedMessage = CompressMessage(json);
 
             if (compressedMessage.Length > MaxChunkSize)
             {
@@ -60,10 +64,10 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
 
                 // Our compressed message is too big to fit in a single datagram. Need to chunk...
                 // https://github.com/Graylog2/graylog2-docs/wiki/GELF "Chunked GELF"
-                var numberOfChunksRequired = compressedMessage.Length / messageSize + 1;
+                var numberOfChunksRequired = (compressedMessage.Length / messageSize) + 1;
 
                 if (numberOfChunksRequired <= MaxNumberOfChunksAllowed)
-                { 
+                {
                     var messageId = GenerateMessageId();
 
                     for (var i = 0; i < numberOfChunksRequired; i++)
@@ -82,7 +86,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
                 else
                 {
                     InternalLogger.Debug(() => $"Unable to transport datagram, chunksize exceeded the limit ({MaxNumberOfChunksAllowed})!");
-                    return;
                 }
             }
             else
@@ -119,6 +122,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             b[0] = 0x1e;
             b[1] = 0x0f;
             messageId.CopyTo(b, 2);
+
             b[10] = (byte)chunkSequenceNumber;
             b[11] = (byte)chunkCount;
 

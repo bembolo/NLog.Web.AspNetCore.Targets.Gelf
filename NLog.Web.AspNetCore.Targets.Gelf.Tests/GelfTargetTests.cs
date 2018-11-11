@@ -1,18 +1,16 @@
-using System;
-using System.Linq;
-using Xunit;
+﻿using System.Linq;
 using Newtonsoft.Json.Linq;
-using System.Net;
 using NLog.Layouts;
 using NSubstitute;
+using Xunit;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
 {
     public class GelfTargetTests
     {
-        private ITransportFactory _transportFactory;
-        private ITransport _transport;
-        private IConverter _converter;
+        private readonly ITransportFactory _transportFactory;
+        private readonly ITransport _transport;
+        private readonly IConverter _converter;
 
         public GelfTargetTests()
         {
@@ -24,11 +22,11 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [Fact]
         public void ShouldDisposeDisposeTransportWhenAvailable()
         {
-            var target = new GelfTarget(_transportFactory, _converter);
-            
+            var target = new TestGelfTarget(_transportFactory, _converter);
+
             _transportFactory.CreateTransport(target).Returns(_transport);
 
-            target.InternalWrite(new LogEventInfo { Message = "Test Message" });
+            target.InitializeTarget();
 
             // Act
             target.Dispose();
@@ -68,6 +66,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         public void ShouldFacilitySet()
         {
             const string expectedFacility = "facility";
+
             // Act
             var target = new GelfTarget(_transportFactory, _converter)
             {
@@ -109,7 +108,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [Fact]
         public void ShouldWriteSendUdpMessage()
         {
-            var target = new GelfTarget(_transportFactory, _converter);
+            var target = new TestGelfTarget(_transportFactory, _converter);
 
             _transportFactory.CreateTransport(target).Returns(_transport);
 
@@ -118,8 +117,10 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
             var gelfObject = new JObject();
             _converter.GetGelfObject(logEventInfo).Returns(gelfObject);
 
+            target.InitializeTarget();
+
             // Act
-            target.InternalWrite(logEventInfo);
+            target.Write(logEventInfo);
 
             // Assert
             _transportFactory.Received(1).CreateTransport(target);
@@ -130,7 +131,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [Fact]
         public void ShouldWriteNotSendMessageWhenTransportNotFound()
         {
-            var target = new GelfTarget(_transportFactory, _converter);
+            var target = new TestGelfTarget(_transportFactory, _converter);
 
             _transportFactory.CreateTransport(target).Returns(Substitute.For<ITransport>());
 
@@ -139,8 +140,10 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
             var gelfObject = new JObject();
             _converter.GetGelfObject(logEventInfo).ReturnsForAnyArgs(gelfObject);
 
+            target.InitializeTarget();
+
             // Act
-            target.InternalWrite(logEventInfo);
+            target.Write(logEventInfo);
 
             // Assert
             _transportFactory.Received(1).CreateTransport(target);
@@ -215,7 +218,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         public void ShouldWriteAddParametersToLogEvent()
         {
             var parameter = new GelfParameterInfo("parameterName", new SimpleLayout("${message}"));
-            var target = new GelfTarget(_transportFactory, _converter)
+            var target = new TestGelfTarget(_transportFactory, _converter)
             {
                 Parameters = { parameter }
             };
@@ -227,8 +230,10 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
             var gelfObject = new JObject();
             _converter.GetGelfObject(logEventInfo).ReturnsForAnyArgs(gelfObject);
 
+            target.InitializeTarget();
+
             // Act
-            target.InternalWrite(logEventInfo);
+            target.Write(logEventInfo);
 
             // Assert
             Assert.NotEmpty(logEventInfo.Properties);
@@ -241,24 +246,25 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [Fact]
         public void ShouldWriteAddLastLogEventParametersAsObjectToLogEventWhenSendLastParameterIsTrue()
         {
-            var target = new GelfTarget(_transportFactory, _converter)
+            var target = new TestGelfTarget(_transportFactory, _converter)
             {
                 SendLastFormatParameter = true
             };
-
             _transportFactory.CreateTransport(target).Returns(Substitute.For<ITransport>());
 
-            var parameter = new {Hello = "World!"};
+            var parameter = new { Hello = "World!" };
             var logEventInfo = new LogEventInfo
             {
-                Parameters = new[]{ parameter }
+                Parameters = new[] { parameter }
             };
 
             var gelfObject = new JObject();
             _converter.GetGelfObject(logEventInfo).ReturnsForAnyArgs(gelfObject);
 
+            target.InitializeTarget();
+
             // Act
-            target.InternalWrite(logEventInfo);
+            target.Write(logEventInfo);
 
             // Assert
             Assert.NotEmpty(logEventInfo.Properties);

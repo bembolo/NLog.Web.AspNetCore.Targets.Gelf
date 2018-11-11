@@ -8,7 +8,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [Fact]
         public void ShouldSerializeJsonProperties()
         {
-            var message = new GelfMessage()
+            var message = new GelfMessage
             {
                 Level = 4,
                 Facility = "facility",

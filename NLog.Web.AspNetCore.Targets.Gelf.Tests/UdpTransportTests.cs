@@ -1,19 +1,18 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using NSubstitute;
 using System.IO.Compression;
 using System.Linq;
-using System.Net;
 using System.Text;
 using Newtonsoft.Json.Linq;
+using NSubstitute;
 using Xunit;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
 {
     public class UdpTransportTests
     {
-        private IUdpClient _client;
+        private readonly IUdpClient _client;
 
         public UdpTransportTests()
         {
@@ -23,8 +22,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [Fact]
         public void ShouldConstructorCreateUdpTransport()
         {
-            var endpoint = new IPEndPoint(IPAddress.Loopback, 12201);
-            
             int expectedMaxChunkSize = 1500;
 
             // Act
@@ -37,8 +34,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [Fact]
         public void ShouldConstructorThrowArgumentNullExceptionWhenUdpClientIsNull()
         {
-            var endpoint = new IPEndPoint(IPAddress.Loopback, 12201);
-            
             int expectedMaxChunkSize = 1500;
 
             // Act
@@ -69,12 +64,12 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         [Fact]
         public void ShouldConstructChunkHeaderBytesConstructChunkHeader()
         {
-            var bytes = new byte[] {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
+            var bytes = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
 
             // Act
             var chunkHeader = UdpTransport.ConstructChunkHeader(bytes, 1, 2);
 
-            Assert.Equal(new byte[]{0x1e, 0x0f, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x01, 0x02}, chunkHeader);
+            Assert.Equal(new byte[] { 0x1e, 0x0f, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x01, 0x02 }, chunkHeader);
         }
 
         [Fact]
@@ -122,7 +117,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         public void ShouldSendSendDatagramChunkedWhenMessageLargerThanChunkSize()
         {
             const int chunkSize = 600;
-            var udpClient = Substitute.For<IUdpClient>();
 
             var transport = new UdpTransport(_client, chunkSize);
 
@@ -140,7 +134,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         public void ShouldSendNotSendDatagramWhenRequiredChunksExceedLimit()
         {
             const int chunkSize = 600;
-            var udpClient = Substitute.For<IUdpClient>();
 
             var transport = new UdpTransport(_client, chunkSize);
 
@@ -157,7 +150,6 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         public void ShouldSendSendDatagram()
         {
             const int chunkSize = 1500;
-            var udpClient = Substitute.For<IUdpClient>();
 
             var transport = new UdpTransport(_client, chunkSize);
 
@@ -173,15 +165,19 @@ namespace NLog.Web.AspNetCore.Targets.Gelf.Tests
         {
             public bool Equals(byte[] x, byte[] y)
             {
-                if (ReferenceEquals(x, y)) return true;
+                if (ReferenceEquals(x, y))
+                    return true;
 
-                if ((x == null && y != null) || (x != null && y == null)) return false;
+                if ((x == null && y != null) || (x != null && y == null))
+                    return false;
 
-                if (x.Length != y.Length) return false;
+                if (x.Length != y.Length)
+                    return false;
 
                 for (int i = 0; i < x.Length; i++)
                 {
-                    if (x[i] != y[i]) return false;
+                    if (x[i] != y[i])
+                        return false;
                 }
 
                 return true;

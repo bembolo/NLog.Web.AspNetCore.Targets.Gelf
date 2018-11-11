@@ -1,8 +1,8 @@
-﻿using NLog.Common;
-using System;
+﻿using System;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using NLog.Common;
 
 namespace NLog.Web.AspNetCore.Targets.Gelf
 {
@@ -14,6 +14,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
         {
             _dns = dns;
         }
+
         public ITransport CreateTransport(IGelfTarget target)
         {
             ITransport transport = null;
@@ -24,7 +25,11 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             }
             else
             {
-                transport = CreateUdpTransport(target);
+                transport = new[]
+                {
+                    CreateUdpTransport(target),
+                    CreateHttpTransport(target)
+                }.FirstOrDefault(t => t != null);
 
                 if (transport == null)
                     InternalLogger.Warn("No transport could be created for the given endpoint");
@@ -33,16 +38,28 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
             return transport;
         }
 
+        private ITransport CreateHttpTransport(IGelfTarget target)
+        {
+            return CreateTransport(target, ipEndpoint => new HttpTransport(ipEndpoint), "http", "https");
+        }
+
         private ITransport CreateUdpTransport(IGelfTarget target)
         {
-            ITransport result = null;
+            return CreateTransport(target, ipEndpoint => new UdpTransport(ipEndpoint, target.MaxUdpChunkSize), "udp");
+        }
 
-            if (target.EndpointUri.Scheme.ToUpper() == "UDP")
+        private ITransport CreateTransport(IGelfTarget target, Func<IPEndPoint, ITransport> transportFactory, params string[] matchingUriSchemes)
+        {
+            ITransport result = null;
+            var scheme = target.EndpointUri.Scheme.ToUpperInvariant();
+            matchingUriSchemes = matchingUriSchemes.Select(s => s.ToUpperInvariant()).ToArray();
+
+            if (matchingUriSchemes.Contains(scheme))
             {
                 IPEndPoint ipEndpoint = GetIpEndpoint(target.EndpointUri);
 
                 if (ipEndpoint != null)
-                    result = new UdpTransport(ipEndpoint, target.MaxUdpChunkSize);
+                    result = transportFactory(ipEndpoint);
                 else
                     InternalLogger.Warn($"Unable to determine IPv4 address of host: {target.EndpointUri.Host}");
             }

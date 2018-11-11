@@ -6,7 +6,7 @@ namespace NLog.Web.AspNetCore.Targets.Gelf
     {
         public IPAddress[] GetHostAddresses(string hostNameOrAddress)
         {
-            return Dns.GetHostAddresses(hostNameOrAddress);
+            return Dns.GetHostAddressesAsync(hostNameOrAddress).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         public string GetHostName()
